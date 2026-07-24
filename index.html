@@ -23,9 +23,24 @@
       justify-content: center;
       align-items: center;
     }
+    #img_holder{
+      position:absolute;
+      left:0;
+      top:0;
+      display:flex;
+      flex-direction: column;
+      padding:20px;
+      gap:10px;
+    }
   </style>
 </head>
 
 <body>
+  <div id = "img_holder">
+    <div>target curvature:</div> 
+    <canvas id = "target_image" width = "200" height = "200" onclick = "drawOnImage(event)" onmousemove = "drawOnImage(event)" style = "cursor:crosshair;" draggable = "false" style = "user-select: none;"/>
+    <!-- <img id = "target_image" width = "200px" height = "200px" onclick = "drawOnImage(event)" onmousemove = "drawOnImage(event)" style = "cursor:crosshair;" draggable = "false" style = "user-select: none;"> -->
+    <div id = "random_seed_text">seed: </div> 
+  </div>
 </body>
 </html>
