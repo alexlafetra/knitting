@@ -26,23 +26,52 @@ A curvature map would be better for this, let me try prototyping a heightmap -->
 negative curvature (concave) means shorter/fewer springs/stitches, positive means larger/more
 this would be a switch from point-displacing (where there's a known target point position) to more force-driving where
 there's a known spring length? or wait, maybe you could 
+
+7.24.26
+okay, webGL is working and working really well! which is awesome. The drawing is fun and intuitive, but the cloth doesn't feel stiff/constrained
+enough to behave like yarn. Next up i think we need an angular constraint to control how sharp a vertice can be
+also, a way to generate meshes in patches (instead of just in a square) is key. I'm imagining this could let me
+start with UV unwrapped patches (or make a little UV unwrapper) which can then use those as the base patches.
+
+Maybe the other yarn literature has an approach to this! like a good way of splitting a model into knittable patches.
+
 */
 
 let mainCanvas;
 let fabric;
 let targetImage;
-let extraForce;
+let curvatureTexture_webgl;
 let drawingCanvasCtx;
+let sketchpadShader;
+let sketchpadVAO;
 
+let curvatureScaleFactor = 1.0;
+let expansionScaleFactor = 2.0;
+let contractionScaleFactor = 1.0;
 
-const scale = 20;
+let wind = {
+    x : 0,
+    y : 0,
+    z : 0.04
+};
+let bendStiffness = {
+    x : 0.01,
+    y : 0.01,
+    diagonal : 0.01
+};
+let springStiffness = 0.85;
+let damping = 0.2;
+let brushSize = 10;
+let blurSize = 10;
+const scale = 10;
 const seed = 1.7;
 const growthScale = 10;
-const dim = 30;
+const dim = 300;
 const noiseScale = 100.0/dim;
-const iterations = 20;
+const iterations = 50;
 let tempImage;
 let imageHasUpdated = false;
+let brush = "draw";//draw or erase
 
 function heightAt(u, v) {
     const radius = 1.0;
@@ -52,39 +81,104 @@ function heightAt(u, v) {
     return n*n*2;
 }
 
+function clearSketchpad(){
+    fillSketchpad([0,0,0]);
+}
+function fillSketchpad(c){
+    targetImage.background(c);
+    updateDrawingCanvas();
+}
+
 function preload(){
     tempImage = loadImage("test.png");
 }
 function loadCurvatureTexture(){
     targetImage = createGraphics(200,200);
-    targetImage.image(tempImage,0,0,targetImage.width,targetImage.height);
+    targetImage.background(0,0,0,0);
+    targetImage.fill(0,0,0);
+    targetImage.ellipse(50,100,50,50);
+    targetImage.ellipse(150,100,100,100);
+    // targetImage.ellipse(100,100,200,200);
+    // targetImage.image(tempImage,0,0,targetImage.width,targetImage.height);
+    
+}
+function initSketchpad(){
+    drawingCanvasCtx = document.getElementById("target_image").getContext('webgl2');
+    sketchpadShader = createRawWebGLProgram(drawingCanvasCtx,sketchpadShaderSrc.vert,sketchpadShaderSrc.frag);
+    loadCurvatureTexture();
+
+    // full-screen triangle (covers clip space, no need for a quad)
+    const verts = new Float32Array([
+        -1, -1,
+         3, -1,
+        -1,  3
+    ]);
+
+    const vao = drawingCanvasCtx.createVertexArray();
+    drawingCanvasCtx.bindVertexArray(vao);
+
+    const buf = drawingCanvasCtx.createBuffer();
+    drawingCanvasCtx.bindBuffer(drawingCanvasCtx.ARRAY_BUFFER, buf);
+    drawingCanvasCtx.bufferData(drawingCanvasCtx.ARRAY_BUFFER, verts, drawingCanvasCtx.STATIC_DRAW);
+
+    drawingCanvasCtx.enableVertexAttribArray(0); // aCoord
+    drawingCanvasCtx.vertexAttribPointer(0, 2, drawingCanvasCtx.FLOAT, false, 0, 0);
+
+    sketchpadVAO = vao; // store for render loop
+
+    curvatureTexture_webgl = drawingCanvasCtx.createTexture();
+    drawingCanvasCtx.bindTexture(drawingCanvasCtx.TEXTURE_2D, curvatureTexture_webgl);
+    // set params once — they don't need to be redeclared every frame
+    drawingCanvasCtx.texParameteri(drawingCanvasCtx.TEXTURE_2D, drawingCanvasCtx.TEXTURE_WRAP_S, drawingCanvasCtx.CLAMP_TO_EDGE);
+    drawingCanvasCtx.texParameteri(drawingCanvasCtx.TEXTURE_2D, drawingCanvasCtx.TEXTURE_WRAP_T, drawingCanvasCtx.CLAMP_TO_EDGE);
+    drawingCanvasCtx.texParameteri(drawingCanvasCtx.TEXTURE_2D, drawingCanvasCtx.TEXTURE_MIN_FILTER, drawingCanvasCtx.LINEAR);
+    drawingCanvasCtx.texParameteri(drawingCanvasCtx.TEXTURE_2D, drawingCanvasCtx.TEXTURE_MAG_FILTER, drawingCanvasCtx.LINEAR);
+
     updateDrawingCanvas();
 }
+
+function updateDrawingCanvas(){
+    drawingCanvasCtx.viewport(0, 0, mainCanvas.width*2, mainCanvas.height*2);
+    drawingCanvasCtx.clearColor(0.5,0.5,0.5,1.0);
+    drawingCanvasCtx.clear(drawingCanvasCtx.COLOR_BUFFER_BIT);
+
+    drawingCanvasCtx.useProgram(sketchpadShader);
+
+    drawingCanvasCtx.activeTexture(drawingCanvasCtx.TEXTURE0);
+    drawingCanvasCtx.bindTexture(drawingCanvasCtx.TEXTURE_2D, curvatureTexture_webgl);
+    // pull the latest pixels from targetImage's canvas into the GPU texture
+    drawingCanvasCtx.texImage2D(
+        drawingCanvasCtx.TEXTURE_2D, 0, drawingCanvasCtx.RGBA,
+        drawingCanvasCtx.RGBA, drawingCanvasCtx.UNSIGNED_BYTE,
+        targetImage.canvas // the DOM canvas element p5 is drawing into
+    );
+    
+    drawingCanvasCtx.uniform1i(drawingCanvasCtx.getUniformLocation(sketchpadShader, "inputData"), 0);
+
+    drawingCanvasCtx.bindVertexArray(sketchpadVAO);
+    drawingCanvasCtx.drawArrays(drawingCanvasCtx.TRIANGLES, 0, 3);
+}
+
 function setup(){
     mainCanvas = createCanvas(800,800,WEBGL);
+    initCameraControls(mainCanvas.canvas);
     let seed = 100*Math.random();
     // let seed = 20;
     randomSeed(seed);
     noiseSeed(seed);
-    // extraForce = createVector(0,0,0);
-    extraForce = createVector(0.0,0.0,2.0);
-    document.getElementById("random_seed_text").innerText = `seed: ${seed}`;
-    drawingCanvasCtx = document.getElementById("target_image").getContext('2d');
-    // fillNoiseTexture();
-    loadCurvatureTexture();
-    fabric = new Grid();
+    initSketchpad();
+    initGL();
+    // fabric = new Grid();
     ortho(-800,800,-800,800,0,10000);
 }
 
 function draw(){
-    background(255);
+    background(0);
     // orbitControl();
-    fabric.update();
-    fabric.render();
-}
-
-function updateDrawingCanvas(){
-    drawingCanvasCtx.drawImage(targetImage.elt,0,0,targetImage.width,targetImage.height);
+    // fabric.update();
+    // fabric.render();
+    updateGL();
+    renderGL();
 }
 
 function fillNoiseTexture(){
@@ -121,11 +215,15 @@ function drawOnImage(e){
         y : e.offsetY
     };
     targetImage.push();
-    targetImage.fill(e.shiftKey?[0,0,0]:[0,255,0]);
-    targetImage.drawingContext.filter = 'blur(30px)'; // Set blur strength in pixels
+    if(brush == 'erase')
+        targetImage.erase(255,255);
+    targetImage.fill(e.shiftKey?[0]:[255]);
+    if(brush != 'erase')
+        targetImage.drawingContext.filter = `blur(${blurSize}px)`; // Set blur strength in pixels
     targetImage.noStroke();
-    targetImage.ellipse(coords.x,coords.y,15,15);
+    targetImage.ellipse(coords.x,coords.y,brushSize,brushSize);
     targetImage.pop();
+    targetImage.noErase();
     updateDrawingCanvas();
     imageHasUpdated = true;
 }
@@ -184,7 +282,7 @@ class Grid{
     }
     verletUpdate(){
         // const damping = 0.985;
-        const damping = 1;
+        // const damping = 1;
         for(let v of this.vertices){
             //if pinned, skeeeiiip
             if(v.pinned){
@@ -306,7 +404,8 @@ class SpringSegment{
         let a = this.v1, b = this.v2;
         let delta = p5.Vector.sub(a.currentPosition, b.currentPosition);
         let currentLength = delta.mag();
-        if(!(currentLength > 1e-6) || !isFinite(currentLength)) return;
+        if(!(currentLength > 1e-6) || !isFinite(currentLength))
+            return;
         let diff = currentLength - this.restLength;
         this.stress = currentLength*1.5;
         let correction = delta.mult(this.stiffness * diff / currentLength);
@@ -346,3 +445,47 @@ class SpringSegment{
 }
 
 const glsl = x => x;
+
+//gray is neutral, black is negative curvature, white is positive
+const sketchpadShaderSrc = {
+    vert: ``+glsl`#version 300 es
+
+        precision highp float;
+
+        layout(location=0) in vec2 aCoord;
+        out vec2 vTexCoord;
+
+        void main() {
+            vTexCoord = aCoord * 0.5 + 0.5;
+            vTexCoord.y = 1.0 - vTexCoord.y; // correct for canvas → GL texture orientation
+            gl_Position = vec4(aCoord,1.0,1.0);
+        }
+        `,
+    frag: ``+glsl`#version 300 es
+            precision highp float;
+
+            uniform sampler2D inputData;
+
+            in vec2 vTexCoord;
+            out vec4 outColor;
+
+            // Converts HSL to RGB
+            vec3 hsl2rgb(vec3 c) {
+                vec3 rgb = clamp(abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+                return c.z + c.y * (rgb - 0.5) * (1.0 - abs(2.0 * c.z - 1.0));
+            }
+
+            void main(){
+                //this is a REALLY fragile way to do this, but I'm not fixing it rn
+                float dim = float(textureSize(inputData,0)) * 0.5;
+                vec2 coord = vec2(gl_FragCoord.x/dim,1.0 - gl_FragCoord.y/dim);
+                vec4 color = texture(inputData,coord);
+                //detecting mask edges
+                if(color.a <= 0.01){
+                    outColor = vec4(0.0);
+                    return;
+                }
+                outColor = vec4(hsl2rgb(vec3(1.7 - color.g/1.5,1.0,0.5)),1.0);
+            }
+            `
+}
