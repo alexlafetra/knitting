@@ -82,8 +82,10 @@ vec3 hsl2rgb(vec3 c) {
 }
 
 void main(){
-    if(vColor.a <= 0.01)
-        discard;
+    if(vColor.a <= 0.01){
+        outColor = vec4(0.0,0.0,0.0,1.0);
+        return;
+    }
 
     // map stretch ratio to color: blue-ish when compressed, white at rest, red when stretched
     float t = clamp(1.2 - vStretch/1.8, 0.0 , 1.0); // roughly -1..1 around rest length
@@ -184,8 +186,7 @@ vec3 bendWing(ivec2 hingeACoord, ivec2 hingeBCoord, ivec2 otherWingCoord, vec3 w
     return -nWing * angle * stiffness * edgeLen;
 }
 
-vec4 fetchTargetCurvature(ivec2 coord, ivec2 dims){
-    vec4 originalStartingCoords = texelFetch(initialPositionTexture,coord,0);
+vec4 fetchTargetCurvature(ivec2 coord, vec4 originalStartingCoords, ivec2 dims){
     // convert world-space initial loc coords to uv to read from the texture
     vec2 uv = originalStartingCoords.xy / (vec2(dims - 1) * scale);
     return texture(curvatureTexture, uv);
@@ -236,8 +237,8 @@ void main(){
     vec3 pos = data.xyz;
     int supportSize = 50;
     int supportSpacing = 3;
-
-    vec4 curvature = fetchTargetCurvature(coord,dims);
+    vec4 originalStartingCoords = texelFetch(initialPositionTexture,coord,0);
+    vec4 curvature = fetchTargetCurvature(coord,originalStartingCoords,dims);
 
     // pin all edges
     //skip areas with transparent curvature! this is like the mask
@@ -246,7 +247,7 @@ void main(){
     // if((coord.y == 0 || coord.y == dims.y - 1) && (coord.x == 0 || coord.x == dims.x - 1)){
     //pin every N points along edge
     // if((coord.y % supportSpacing == 0) && (coord.x % supportSpacing == 0) && (coord.y == 0 || coord.x == 0 || coord.y == dims.y - 1 - dims.y%supportSpacing || coord.x == dims.x -1)){
-        outColor = data;
+        outColor = vec4(originalStartingCoords.xyzw);
         return;
     }
 

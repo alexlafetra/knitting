@@ -9,6 +9,7 @@
   <script language="javascript" type="text/javascript" src="libraries/p5.min.js"></script>
   <script language="javascript" type="text/javascript" src="webgl-utils.js"></script>
   <script language="javascript" type="text/javascript" src="Mat4.js"></script>
+  <script language="javascript" type="text/javascript" src="ui.js"></script>
   <script language="javascript" type="text/javascript" src="fabric.js"></script>
   <script language="javascript" type="text/javascript" src="gl_prototype.js"></script>
   <script language="javascript" type="text/javascript" src="main.js"></script>
@@ -76,8 +77,8 @@
     .button {
       width: fit-content;
       height: fit-content;
-      min-height: 10px;
-      min-width: 10px;
+      min-height: 5px;
+      min-width:5px;
       padding: 10px;
       background-color: var(--color);
       margin: 5px;
@@ -91,10 +92,13 @@
       cursor: pointer;
       height: fit-content;
       width: 50px;
+      border-radius:15px;
+      padding:5px;
     }
 
     .button:hover {
-      background-color: transparent;
+      opacity:0.5;
+      /* background-color: transparent; */
       outline: 2px solid var(--color);
     }
 
@@ -111,13 +115,13 @@
   <div id="menu_container">
     <div id="canvas_ui_container">
       <!-- <div>target curvature:</div>  -->
-      <canvas id="target_image" width="200" height="200" onclick="drawOnImage(event)" onmousemove="drawOnImage(event)"
+      <canvas id="target_image" width="800" height="800" style = "width:200px;height:200px;" onclick="drawOnImage(event)" onmousemove="drawOnImage(event)"
         style="cursor:crosshair;" draggable="false" style="user-select: none;"></canvas>
         <div style = "padding:10px;display:flex;flex-direction: column;">
           <div style="display:flex;flex-direction: row;">
             <div style = "display:flex;flex-direction: column;">
-            <img class="image_button" src="crayon.gif" onclick="brush = 'draw'">
-            <img class="image_button" src="soap.gif" width="60px" onclick="brush = 'erase'">
+            <img id = "tool_button_draw" class="image_button" src="images/crayon.gif" onclick="setTool('draw')" style = "outline:2px solid blue;">
+            <img id = "tool_button_erase" class="image_button" src="images/scissors.gif" width="60px" onclick="setTool('erase')">
           </div>
           <div style="display:flex;flex-direction:row;">
             <div style="display:flex;flex-direction: column;">
@@ -125,6 +129,11 @@
                 brush size
                 <input type="range" min="2.0" max="100.0" step="1" value="1.0"
                   oninput="brushSize = parseFloat(event.target.value);">
+              </div>
+              <div class="slider_input">
+                brush color
+                <input type="range" min="0.0" max="255.0" step="1" value="1.0"
+                  oninput="brushColor = parseFloat(event.target.value);">
               </div>
               <div class="slider_input">
                 gradient size
@@ -135,9 +144,10 @@
             </div>
           </div>
           <div style = "display:flex;flex-direction: row;">
-            <img class="image_button" src="paint.gif" width="60px" onclick="brush = 'erase'">
+            <img class="image_button" src="images/paint.gif" width="60px" onclick="brush = 'erase'">
             <div style = "display:flex;flex-direction: column;">
             <div class="button" onclick="clearSketchpad()" style="--color:blue;"></div>
+            <div class="button" onclick="fillSketchpad([122.5,122.5,122.5])" style="--color:rgb(0, 255, 0);"></div>
             <div class="button" onclick="fillSketchpad([255,255,255])" style="--color:red;"></div>
             </div>
           </div>
@@ -156,9 +166,12 @@
           oninput="springStiffness = parseFloat(event.target.value);">
       </div>
       <div class="slider_input">
-        wind
-        <input type="range" min="-0.5" max="0.5" step="0.001" value="0.0"
-          oninput="wind.z = parseFloat(event.target.value);">
+        pressure
+        <div style = "display:flex;flex-direction: row;">
+          <input id = "wind_slider" type="range" min="-0.5" max="0.5" step="0.001" value="0.0"
+            oninput="wind.z = parseFloat(event.target.value);">
+          <div class="button" onclick="resetWind('wind_slider')" style="--color:blue;"></div>
+        </div>
       </div>
       <div class="slider_input">
         curvature
@@ -168,14 +181,14 @@
       <div class="slider_input">
         <div>bend</div>
         x
-        <input type="range" min="0.0" max="0.3" step="0.001" value="0.0"
-          oninput="bendStiffness.x = parseFloat(event.target.value);">
+        <input id = "bend_stiffness_x" type="range" min="0.0" max="0.1" step="0.001" value="0.0"
+          oninput="updateBendStiffness(event.target.value,'x');">
         y
-        <input type="range" min="0.0" max="0.3" step="0.001" value="0.0"
-          oninput="bendStiffness.y = parseFloat(event.target.value);">
+        <input id = "bend_stiffness_y" type="range" min="0.0" max="0.1" step="0.001" value="0.0"
+          oninput="updateBendStiffness(event.target.value,'y');">
         diagonal
-        <input type="range" min="0.0" max="0.3" step="0.001" value="0.0"
-          oninput="bendStiffness.diagonal = parseFloat(event.target.value);">
+        <input id = "bend_stiffness_diagonal" type="range" min="0.0" max="0.1" step="0.001" value="0.0"
+          oninput="updateBendStiffness(event.target.value,'diagonal');">
       </div>
     </div>
   </div>

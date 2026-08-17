@@ -52,21 +52,24 @@ let contractionScaleFactor = 1.0;
 let wind = {
     x : 0,
     y : 0,
-    z : 0.04
+    z : 0.0
 };
 let bendStiffness = {
     x : 0.01,
     y : 0.01,
-    diagonal : 0.01
+    diagonal : 0.01,
+    locked : true
 };
 let springStiffness = 0.85;
+let sketchpadDim = 100;
 let damping = 0.2;
 let brushSize = 10;
 let blurSize = 10;
+let brushColor = 255;
 const scale = 10;
 const seed = 1.7;
 const growthScale = 10;
-const dim = 300;
+const dim = 100;
 const noiseScale = 100.0/dim;
 const iterations = 50;
 let tempImage;
@@ -81,26 +84,30 @@ function heightAt(u, v) {
     return n*n*2;
 }
 
+function fullReset(){
+
+}
+
 function clearSketchpad(){
     fillSketchpad([0,0,0]);
 }
+
 function fillSketchpad(c){
     targetImage.background(c);
     updateDrawingCanvas();
 }
 
 function preload(){
-    tempImage = loadImage("test.png");
+    tempImage = loadImage("images/test.png");
 }
 function loadCurvatureTexture(){
     targetImage = createGraphics(200,200);
-    targetImage.background(0,0,0,0);
-    targetImage.fill(0,0,0);
-    targetImage.ellipse(50,100,50,50);
-    targetImage.ellipse(150,100,100,100);
-    // targetImage.ellipse(100,100,200,200);
+    targetImage.background(0,0,0);
+    // targetImage.fill(0,0,0);
+    // targetImage.ellipse(50,100,50,50);
+    // targetImage.ellipse(150,100,100,100);
+
     // targetImage.image(tempImage,0,0,targetImage.width,targetImage.height);
-    
 }
 function initSketchpad(){
     drawingCanvasCtx = document.getElementById("target_image").getContext('webgl2');
@@ -169,7 +176,7 @@ function setup(){
     initSketchpad();
     initGL();
     // fabric = new Grid();
-    ortho(-800,800,-800,800,0,10000);
+    // ortho(-800,800,-800,800,0,10000);
 }
 
 function draw(){
@@ -217,7 +224,7 @@ function drawOnImage(e){
     targetImage.push();
     if(brush == 'erase')
         targetImage.erase(255,255);
-    targetImage.fill(e.shiftKey?[0]:[255]);
+    targetImage.fill(e.shiftKey?[255- brushColor]:[brushColor]);
     if(brush != 'erase')
         targetImage.drawingContext.filter = `blur(${blurSize}px)`; // Set blur strength in pixels
     targetImage.noStroke();
